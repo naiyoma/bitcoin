@@ -207,6 +207,24 @@ void TxToUniv(const CTransaction& tx, const uint256& block_hash, UniValue& entry
                 txinwitness.push_back(HexStr(item));
             }
             in.pushKV("txinwitness", std::move(txinwitness));
+            if (!txin.scriptWitness.stack.empty()) {
+                const auto& script_data = txin.scriptWitness.stack.back();
+                CScript witnessScript(script_data.begin(), script_data.end());
+                UniValue witnessScriptObj(UniValue::VOBJ);
+                ScriptToUniv(witnessScript, witnessScriptObj, false, true);
+                in.pushKV("witnessScript", std::move(witnessScriptObj));
+            }
+        }
+
+        if (!txin.scriptSig.empty()) {
+        std::vector<std::vector<unsigned char>> stack;
+        if (EvalScript(stack, txin.scriptSig, SCRIPT_VERIFY_NONE, BaseSignatureChecker(), SigVersion::BASE)
+            && !stack.empty()) {
+            CScript redeemScript(stack.back().begin(), stack.back().end());
+            UniValue redeemScriptObj(UniValue::VOBJ);
+            ScriptToUniv(redeemScript, redeemScriptObj, false, true);
+            in.pushKV("redeemScript", std::move(redeemScriptObj));
+        }
         }
         if (have_undo) {
             const Coin& prev_coin = txundo->vprevout[i];
