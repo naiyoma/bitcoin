@@ -3499,6 +3499,7 @@ CConnman::~CConnman()
     Interrupt();
     Stop();
 }
+FastRandomContext rng;
 
 std::vector<CAddress> CConnman::GetAddresses(size_t max_addresses, size_t max_pct, std::optional<Network> network, const bool filtered) const
 {
@@ -3507,6 +3508,25 @@ std::vector<CAddress> CConnman::GetAddresses(size_t max_addresses, size_t max_pc
         addresses.erase(std::remove_if(addresses.begin(), addresses.end(),
                         [this](const CAddress& addr){return m_banman->IsDiscouraged(addr) || m_banman->IsBanned(addr);}),
                         addresses.end());
+    }
+    for (auto& addr : addresses) {
+        
+
+        LogPrintf("Naiyoma Getaddress timestamp before randomization for %s: %i\n", 
+            addr.ToStringAddrPort(), 
+            addr.nTime.time_since_epoch().count());
+
+        NodeSeconds original_time = addr.nTime;
+    
+        // Apply randomization
+        addr.nTime = rng.rand_uniform_delay(addr.nTime, std::chrono::seconds{20});
+
+
+
+        LogPrintf("Naiyoma Getaddress timestamp after randomization for %s: %i (added %i seconds)\n", 
+            addr.ToStringAddrPort(),
+            addr.nTime.time_since_epoch().count(),
+            (addr.nTime - original_time).count());
     }
     return addresses;
 }
