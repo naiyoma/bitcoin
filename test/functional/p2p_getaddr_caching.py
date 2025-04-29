@@ -26,15 +26,22 @@ class AddrReceiver(P2PInterface):
     def __init__(self):
         super().__init__()
         self.received_addrs = None
+        self.received_addrs_with_time = None
 
     def get_received_addrs(self):
         with p2p_lock:
             return self.received_addrs
 
+    def get_received_addrs_with_time(self):
+        with p2p_lock:
+            return self.received_addrs_with_time
+        
     def on_addr(self, message):
         self.received_addrs = []
+        self.received_addrs_with_time = {}
         for addr in message.addrs:
             self.received_addrs.append(addr.ip)
+            self.received_addrs_with_time[addr.ip] = addr.time
 
     def addr_received(self):
         return self.received_addrs is not None
@@ -116,6 +123,36 @@ class AddrTest(BitcoinTestFramework):
         assert set(last_response_on_local_bind) != set(addr_receiver_local.get_received_addrs())
         assert set(last_response_on_onion_bind1) != set(addr_receiver_onion1.get_received_addrs())
         assert set(last_response_on_onion_bind2) != set(addr_receiver_onion2.get_received_addrs())
+
+
+        # test to verify timestamp randomization
+        self.log.info('Test that timestamps are randomized when getting addresses')
+        
+        # get some addresses directly from addrman
+        original_addrs = self.nodes[0].getnodeaddresses(20)
+        original_timestamps = {addr['address']: addr['time'] for addr in original_addrs}
+        
+        
+        addr_receiver = self.nodes[0].add_p2p_connection(AddrReceiver())
+        cur_mock_time = int(time.time())
+        self.nodes[0].setmocktime(cur_mock_time + 5 * 60)
+        addr_receiver.wait_until(addr_receiver.addr_received)
+        
+        # check if the addresses we received have different timestamps
+        
+        received_addrs = addr_receiver.get_received_addrs_with_time()
+        
+        # Check that timestamps have been modified by randomization
+        for addr, timestamp in received_addrs.items():
+            if addr in original_timestamps:
+                # import pdb; pdb.set_trace()
+                assert original_timestamps[addr] != timestamp, f"Timestamp for {addr} was not randomized"
+                # The difference should be between 0 and 10 seconds
+                diff = timestamp - original_timestamps[addr]
+                assert 0 < abs(diff) <= 20, f"Timestamp randomization for {addr} outside expected range: {diff} seconds"
+
+
+        # self.test_same_peer_multiple_networks()
 
 
 if __name__ == '__main__':
