@@ -1192,19 +1192,19 @@ bool CheckHostPortOptions(const ArgsManager& args) {
         }
     }
 
-    for ([[maybe_unused]] const auto& [arg, unix] : std::vector<std::pair<std::string, bool>>{
-        // arg name            UNIX socket support
-        {"-i2psam",                 false},
-        {"-onion",                  true},
-        {"-proxy",                  true},
-        {"-rpcbind",                false},
-        {"-torcontrol",             false},
-        {"-whitebind",              false},
-        {"-zmqpubhashblock",        true},
-        {"-zmqpubhashtx",           true},
-        {"-zmqpubrawblock",         true},
-        {"-zmqpubrawtx",            true},
-        {"-zmqpubsequence",         true},
+    for ([[maybe_unused]] const auto& [arg, unix, port_required] : std::vector<std::tuple<std::string, bool, bool>>{
+        // arg name            UNIX socket support  port required
+        {"-i2psam",                 false,          true},
+        {"-onion",                  true,           false},
+        {"-proxy",                  true,           true},
+        {"-rpcbind",                false,          false},
+        {"-torcontrol",             false,          false},
+        {"-whitebind",              false,          true},
+        {"-zmqpubhashblock",        true,           false},
+        {"-zmqpubhashtx",           true,           false},
+        {"-zmqpubrawblock",         true,           false},
+        {"-zmqpubrawtx",            true,           false},
+        {"-zmqpubsequence",         true,           false},
     }) {
         for (const std::string& socket_addr : args.GetArgs(arg)) {
             std::string host_out;
@@ -1218,6 +1218,10 @@ bool CheckHostPortOptions(const ArgsManager& args) {
 #else
                 return InitError(InvalidPortErrMsg(arg, socket_addr));
 #endif
+            } else {
+                if (port_required && port_out == 0) {
+                    return InitError(InvalidPortErrMsg(arg, socket_addr));
+                }
             }
         }
     }
