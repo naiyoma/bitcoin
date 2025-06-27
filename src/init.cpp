@@ -1206,6 +1206,11 @@ bool CheckHostPortOptions(const ArgsManager& args) {
 #else
                 return InitError(InvalidPortErrMsg(param_name, param_value));
 #endif
+            } else {
+                if (arg == "-torcontrol" && port_out == 0) {
+                    LogPrintf("Naiyoma: Error - %s requires a port but none was specified in '%s'\n", arg, socket_addr);
+                    return InitError(InvalidPortErrMsg(arg, socket_addr));
+                }
             }
         }
     }
