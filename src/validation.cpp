@@ -4759,16 +4759,17 @@ VerifyDBResult CVerifyDB::VerifyDB(
     int reportDone = 0;
     bool skipped_no_block_data{false};
     bool skipped_l3_checks{false};
+    const int log_step{nCheckDepth > 1000 ? 1 : 10};
     LogPrintf("Verification progress: 0%%\n");
 
     const bool is_snapshot_cs{chainstate.m_from_snapshot_blockhash};
 
     for (pindex = chainstate.m_chain.Tip(); pindex && pindex->pprev; pindex = pindex->pprev) {
         const int percentageDone = std::max(1, std::min(99, (int)(((double)(chainstate.m_chain.Height() - pindex->nHeight)) / (double)nCheckDepth * (nCheckLevel >= 4 ? 50 : 100))));
-        if (reportDone < percentageDone / 10) {
+        if (reportDone < percentageDone / log_step) {
             // report every 10% step
             LogPrintf("Verification progress: %d%%\n", percentageDone);
-            reportDone = percentageDone / 10;
+            reportDone = percentageDone / log_step;
         }
         m_notifications.progress(_("Verifying blocks…"), percentageDone, false);
         if (pindex->nHeight <= chainstate.m_chain.Height() - nCheckDepth) {
@@ -4841,10 +4842,10 @@ VerifyDBResult CVerifyDB::VerifyDB(
     if (nCheckLevel >= 4 && !skipped_l3_checks) {
         while (pindex != chainstate.m_chain.Tip()) {
             const int percentageDone = std::max(1, std::min(99, 100 - (int)(((double)(chainstate.m_chain.Height() - pindex->nHeight)) / (double)nCheckDepth * 50)));
-            if (reportDone < percentageDone / 10) {
+            if (reportDone < percentageDone / log_step) {
                 // report every 10% step
                 LogPrintf("Verification progress: %d%%\n", percentageDone);
-                reportDone = percentageDone / 10;
+                reportDone = percentageDone / log_step;
             }
             m_notifications.progress(_("Verifying blocks…"), percentageDone, false);
             pindex = chainstate.m_chain.Next(pindex);
