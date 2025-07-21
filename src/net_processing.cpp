@@ -502,7 +502,7 @@ class PeerManagerImpl final : public PeerManager
 public:
     PeerManagerImpl(CConnman& connman, AddrMan& addrman,
                     BanMan* banman, ChainstateManager& chainman,
-                    CTxMemPool* pool, node::Warnings& warnings, Options opts);
+                    CTxMemPool* mempool, node::Warnings& warnings, Options opts);
 
     /** Overridden from CValidationInterface. */
     void ActiveTipChange(const CBlockIndex& new_tip, bool) override
@@ -1910,14 +1910,14 @@ std::optional<std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, const CBl
 
 std::unique_ptr<PeerManager> PeerManager::make(CConnman& connman, AddrMan& addrman,
                                                BanMan* banman, ChainstateManager& chainman,
-                                               CTxMemPool* pool, node::Warnings& warnings, Options opts)
+                                               CTxMemPool* mempool, node::Warnings& warnings, Options opts)
 {
-    return std::make_unique<PeerManagerImpl>(connman, addrman, banman, chainman, pool, warnings, opts);
+    return std::make_unique<PeerManagerImpl>(connman, addrman, banman, chainman, mempool, warnings, opts);
 }
 
 PeerManagerImpl::PeerManagerImpl(CConnman& connman, AddrMan& addrman,
                                  BanMan* banman, ChainstateManager& chainman,
-                                 CTxMemPool* pool, node::Warnings& warnings, Options opts)
+                                 CTxMemPool* mempool, node::Warnings& warnings, Options opts)
     : m_rng{opts.deterministic_rng},
       m_fee_filter_rounder{CFeeRate{DEFAULT_MIN_RELAY_TX_FEE}, m_rng},
       m_chainparams(chainman.GetParams()),
@@ -1925,8 +1925,8 @@ PeerManagerImpl::PeerManagerImpl(CConnman& connman, AddrMan& addrman,
       m_addrman(addrman),
       m_banman(banman),
       m_chainman(chainman),
-      m_mempool(pool),
-      m_txdownloadman(node::TxDownloadOptions{*pool, m_rng, opts.deterministic_rng}),
+      m_mempool(mempool),
+      m_txdownloadman(node::TxDownloadOptions{*mempool, m_rng, opts.deterministic_rng}),
       m_warnings{warnings},
       m_opts{opts}
 {
