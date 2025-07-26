@@ -159,18 +159,13 @@ class ValidWitnessMalleatedTx:
     def __init__(self):
         hashlock = hash160(b'Preimage')
         self.witness_script = CScript([OP_IF, OP_HASH160, hashlock, OP_EQUAL, OP_ELSE, OP_TRUE, OP_ENDIF])
+        self.witness_program = sha256(self.witness_script)
+        self.script_pubkey = CScript([OP_0, self.witness_program])
 
-    def build_parent_tx(self, funding_txid, amount):
-        # Create an unsigned parent transaction paying to the witness script.
-        witness_program = sha256(self.witness_script)
-        script_pubkey = CScript([OP_0, witness_program])
+    def get_script_pubkey(self):
+        return self.script_pubkey
 
-        parent = CTransaction()
-        parent.vin.append(CTxIn(COutPoint(int(funding_txid, 16), 0), b""))
-        parent.vout.append(CTxOut(int(amount), script_pubkey))
-        return parent
-
-    def build_malleated_children(self, signed_parent_txid, amount):
+    def build_malleated_children(self, parent_txid, parent_vout, amount):
         # Create 2 valid children that differ only in witness data.
         # 1. Create a new transaction with witness solving first branch
         child_witness_script = CScript([OP_TRUE])
@@ -178,7 +173,7 @@ class ValidWitnessMalleatedTx:
         child_script_pubkey = CScript([OP_0, child_witness_program])
 
         child_one = CTransaction()
-        child_one.vin.append(CTxIn(COutPoint(int(signed_parent_txid, 16), 0), b""))
+        child_one.vin.append(CTxIn(COutPoint(int(parent_txid, 16), parent_vout), b""))
         child_one.vout.append(CTxOut(int(amount), child_script_pubkey))
         child_one.wit.vtxinwit.append(CTxInWitness())
         child_one.wit.vtxinwit[0].scriptWitness.stack = [b'Preimage', b'\x01', self.witness_script]
