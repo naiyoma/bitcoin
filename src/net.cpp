@@ -3552,6 +3552,14 @@ std::vector<CAddress> CConnman::GetAddresses(CNode& requestor, size_t max_addres
         // nodes to be "terrible" (see IsTerrible()) if the timestamps are older than 30 days,
         // max. 24 hours of "penalty" due to cache shouldn't make any meaningful difference
         // in terms of the freshness of the response.
+        FastRandomContext rng(cache_id);
+        const auto now{Now<NodeSeconds>()};
+
+        for(CAddress& addr: cache_entry.m_addrs_response_cache){
+            // Set timestamps a fixed time in the past (10+/-2 days ago)
+            // addr.nTime = current_time - 10d - rng.randrange<std::chrono::microseconds>(4d);
+            addr.nTime = now - std::chrono::hours((8 + rng.randrange(5)) * 24);
+        }
         cache_entry.m_cache_entry_expiration = current_time +
             21h + FastRandomContext().randrange<std::chrono::microseconds>(6h);
     }
