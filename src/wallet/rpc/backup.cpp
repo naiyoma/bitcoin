@@ -137,7 +137,7 @@ static int64_t GetImportTimestamp(const UniValue& data, int64_t now)
     throw JSONRPCError(RPC_TYPE_ERROR, "Missing required timestamp field for key");
 }
 
-static UniValue ProcessDescriptorImport(CWallet& wallet, const UniValue& data, const int64_t timestamp) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
+static UniValue ProcessDescriptorImport(CWallet& wallet, const UniValue& data, const int64_t timestamp, bool validate_only = false) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
 {
     UniValue warnings(UniValue::VARR);
     UniValue result(UniValue::VOBJ);
@@ -224,8 +224,9 @@ static UniValue ProcessDescriptorImport(CWallet& wallet, const UniValue& data, c
             throw JSONRPCError(RPC_WALLET_ERROR, "Cannot import private keys to a wallet with private keys disabled");
         }
 
+
         for (size_t j = 0; j < parsed_descs.size(); ++j) {
-            auto parsed_desc = std::move(parsed_descs[j]);
+            const auto& parsed_desc = parsed_descs[j];
             if (parsed_descs.size() == 2) {
                 desc_internal = j == 1;
             } else if (parsed_descs.size() > 2) {
@@ -258,6 +259,20 @@ static UniValue ProcessDescriptorImport(CWallet& wallet, const UniValue& data, c
                if (!have_all_privkeys) {
                    warnings.push_back("Not all private keys provided. Some wallet functionality may return unexpected errors");
                }
+            }
+        }
+        if (validate_only) {
+            result.pushKV("success", UniValue(true));
+            PushWarnings(warnings, result);
+            return result;
+        }
+        for (size_t j = 0; j < parsed_descs.size(); ++j) {
+            auto parsed_desc = std::move(parsed_descs[j]);
+            bool desc_internal = internal.has_value() && internal.value();
+            if (parsed_descs.size() == 2) {
+                desc_internal = j == 1;
+            } else if (parsed_descs.size() > 2) {
+                CHECK_NONFATAL(!desc_internal);
             }
 
             WalletDescriptor w_desc(std::move(parsed_desc), timestamp, range_start, range_end, next_index);
@@ -378,6 +393,15 @@ RPCHelpMan importdescriptors()
         EnsureWalletIsUnlocked(*pwallet);
 
         CHECK_NONFATAL(pwallet->chain().findBlock(pwallet->GetLastBlockHash(), FoundBlock().time(lowest_timestamp).mtpTime(now)));
+
+        for (const UniValue& request : requests.getValues()) {
+        const int64_t timestamp = std::max(GetImportTimestamp(request, now), minimum_timestamp);
+        const UniValue result = ProcessDescriptorImport(*pwallet, request, timestamp, /*validate_only=*/true);
+        // If any validation fails, throw immediately and abort everything
+        if (!result["success"].get_bool()) {
+            throw result["error"];
+        }
+    }
 
         // Get all timestamps and extract the lowest timestamp
         for (const UniValue& request : requests.getValues()) {
