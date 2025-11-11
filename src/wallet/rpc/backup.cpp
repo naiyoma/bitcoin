@@ -149,7 +149,6 @@ static UniValue ValidateDescriptorImport(CWallet& wallet, const UniValue& data) 
 
         const std::string& descriptor = data["desc"].get_str();
         const bool active = data.exists("active") ? data["active"].get_bool() : false;
-        const std::string label{LabelFromValue(data["label"])};
 
         // Parse descriptor string
         FlatSigningProvider keys;
