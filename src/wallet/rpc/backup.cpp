@@ -136,6 +136,7 @@ static int64_t GetImportTimestamp(const UniValue& data, int64_t now)
     }
     throw JSONRPCError(RPC_TYPE_ERROR, "Missing required timestamp field for key");
 }
+
 static UniValue ValidDescriptorImport(CWallet& wallet, const UniValue& data, const int64_t timestamp) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
 {
     UniValue warnings(UniValue::VARR);
@@ -278,20 +279,15 @@ static UniValue ProcessDescriptorImport(CWallet& wallet, const UniValue& data, c
         FlatSigningProvider keys;
         std::string error;
         auto parsed_descs = Parse(descriptor, keys, error, /* require_checksum = */ true);
-        if (parsed_descs.empty()) {
-            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, error);
-        }
+
         std::optional<bool> internal;
         if (data.exists("internal")) {
             internal = data["internal"].get_bool();
         }
 
         // Range check
-        std::optional<bool> is_ranged;
         int64_t range_start = 0, range_end = 1, next_index = 0;
-        if (!parsed_descs.at(0)->IsRange() && data.exists("range")) {
-            throw JSONRPCError(RPC_INVALID_PARAMETER, "Range should not be specified for an un-ranged descriptor");
-        } else if (parsed_descs.at(0)->IsRange()) {
+        if (parsed_descs.at(0)->IsRange()) {
             if (data.exists("range")) {
                 auto range = ParseDescriptorRange(data["range"]);
                 range_start = range.first;
@@ -302,14 +298,8 @@ static UniValue ProcessDescriptorImport(CWallet& wallet, const UniValue& data, c
                 range_end = wallet.m_keypool_size;
             }
             next_index = range_start;
-            is_ranged = true;
-
             if (data.exists("next_index")) {
                 next_index = data["next_index"].getInt<int64_t>();
-                // bound checks
-                if (next_index < range_start || next_index >= range_end) {
-                    throw JSONRPCError(RPC_INVALID_PARAMETER, "next_index is out of range");
-                }
             }
         }
 
@@ -322,34 +312,7 @@ static UniValue ProcessDescriptorImport(CWallet& wallet, const UniValue& data, c
             } else if (parsed_descs.size() > 2) {
                 CHECK_NONFATAL(!desc_internal);
             }
-            // Need to ExpandPrivate to check if private keys are available for all pubkeys
-            FlatSigningProvider expand_keys;
-            std::vector<CScript> scripts;
-            if (!parsed_desc->Expand(0, keys, scripts, expand_keys)) {
-                throw JSONRPCError(RPC_WALLET_ERROR, "Cannot expand descriptor. Probably because of hardened derivations without private keys provided");
-            }
-            parsed_desc->ExpandPrivate(0, keys, expand_keys);
 
-            // Check if all private keys are provided
-            bool have_all_privkeys = !expand_keys.keys.empty();
-            for (const auto& entry : expand_keys.origins) {
-                const CKeyID& key_id = entry.first;
-                CKey key;
-                if (!expand_keys.GetKey(key_id, key)) {
-                    have_all_privkeys = false;
-                    break;
-                }
-            }
-
-            // If private keys are enabled, check some things.
-            if (!wallet.IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
-               if (keys.keys.empty()) {
-                    throw JSONRPCError(RPC_WALLET_ERROR, "Cannot import descriptor without private keys to a wallet with private keys enabled");
-               }
-               if (!have_all_privkeys) {
-                   warnings.push_back("Not all private keys provided. Some wallet functionality may return unexpected errors");
-               }
-            }
 
             WalletDescriptor w_desc(std::move(parsed_desc), timestamp, range_start, range_end, next_index);
 
