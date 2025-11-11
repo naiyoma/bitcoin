@@ -137,7 +137,7 @@ static int64_t GetImportTimestamp(const UniValue& data, int64_t now)
     throw JSONRPCError(RPC_TYPE_ERROR, "Missing required timestamp field for key");
 }
 
-static UniValue ValidDescriptorImport(CWallet& wallet, const UniValue& data, const int64_t timestamp) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
+static UniValue ValidateDescriptorImport(CWallet& wallet, const UniValue& data, const int64_t timestamp) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
 {
     UniValue warnings(UniValue::VARR);
     UniValue result(UniValue::VOBJ);
@@ -226,7 +226,6 @@ static UniValue ValidDescriptorImport(CWallet& wallet, const UniValue& data, con
 
         for (size_t j = 0; j < parsed_descs.size(); ++j) {
             auto parsed_desc = std::move(parsed_descs[j]);
-          
             // Need to ExpandPrivate to check if private keys are available for all pubkeys
             FlatSigningProvider expand_keys;
             std::vector<CScript> scripts;
@@ -436,7 +435,7 @@ RPCHelpMan importdescriptors()
         for (const UniValue& request : requests.getValues()) {
             // This throws an error if "timestamp" doesn't exist
             const int64_t timestamp = std::max(GetImportTimestamp(request, now), minimum_timestamp);
-            const UniValue validation_result = ValidDescriptorImport(*pwallet, request, timestamp);
+            const UniValue validation_result = ValidateDescriptorImport(*pwallet, request, timestamp);
             // Check if validation failed
             if (!validation_result["success"].get_bool()) {
                 // Re-throw the error that's already in the validation result
