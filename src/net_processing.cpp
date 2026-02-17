@@ -4085,7 +4085,9 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
                  vAddr.size(), num_proc, num_rate_limit, pfrom.GetId());
 
         m_addrman.Add(vAddrOk, pfrom.addr, /*time_penalty=*/2h);
-        if (vAddr.size() < 1000) peer.m_getaddr_sent = false;
+        if (vAddr.size() < 1000 && !(vAddr.size() == 1 && peer.m_getaddr_sent)) {
+            peer.m_getaddr_sent = false;
+        }
 
         // AddrFetch: Require multiple addresses to avoid disconnecting on self-announcements
         if (pfrom.IsAddrFetchConn() && vAddr.size() > 1) {
