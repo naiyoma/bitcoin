@@ -3728,6 +3728,37 @@ std::vector<CAddress> CConnman::GetAddresses(CNode& requestor, size_t max_addres
         // in terms of the freshness of the response.
         cache_entry.m_cache_entry_expiration = current_time +
             21h + FastRandomContext().randrange<std::chrono::microseconds>(6h);
+
+        // To prevent fingerprinting of dual-homed nodes, fix timestamps for
+        // addresses on different networks than the requestor. Same-network
+        // addresses keep their real timestamps and will age naturally toward
+        // IsTerrible(). Cross-network addresses get a fixed timestamp to
+        // prevent correlation attacks.
+        const Network requestor_network = requestor.addr.GetNetwork();
+        const Network effective = (requestor_network == NET_UNROUTABLE) ? NET_IPV4 : requestor_network;
+
+        LogDebug(BCLog::NET, "GetAddresses: requestor network=%s effective=%s cache_id=%d\n",
+        GetNetworkName(requestor_network), GetNetworkName(effective), network_id);
+        
+        const auto fixed_timestamp = Now<NodeSeconds>() - std::chrono::minutes(
+            8 * 60 * 24 + FastRandomContext().randrange(5 * 60 * 24)
+        );
+        for (CAddress& addr : cache_entry.m_addrs_response_cache) {
+            if (addr.GetNetwork() != effective) {  // use effective, not requestor_network
+                addr.nTime = fixed_timestamp;
+                LogDebug(BCLog::NET, "GetAddresses: cache_id=%d FIXED addr=%s network=%s new_timestamp=%d\n",
+                    network_id,
+                    addr.ToStringAddrPort(),
+                    GetNetworkName(addr.GetNetwork()),
+                    addr.nTime.time_since_epoch().count());
+            } else {
+                LogDebug(BCLog::NET, "GetAddresses: cache_id=%d REAL addr=%s network=%s timestamp=%d\n",
+                    network_id,
+                    addr.ToStringAddrPort(),
+                    GetNetworkName(addr.GetNetwork()),
+                    addr.nTime.time_since_epoch().count());
+            }
+        }
     }
     return cache_entry.m_addrs_response_cache;
 }
