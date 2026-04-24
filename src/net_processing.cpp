@@ -5691,8 +5691,30 @@ void PeerManagerImpl::ProcessAddrs(std::string_view msg_type, CNode& pfrom, Peer
         }
         // Do not store addresses outside our network
         if (reachable) {
+            // Experiment 4: force getaddr response timestamps to 30 days old
+            // to measure gossip relay contribution to addrman freshness
+            if (vAddr.size() >= 990) {
+            LogDebug(BCLog::NET, "experiment4: addr=%s original_nTime=%d\n",
+            addr.ToStringAddrPort(),
+            addr.nTime.time_since_epoch().count());
+    
+            addr.nTime = std::chrono::time_point_cast<std::chrono::seconds>(
+            current_time - 30 * 24h);
+    
+            LogDebug(BCLog::NET, "experiment4: addr=%s forced_nTime=%d\n",
+             addr.ToStringAddrPort(),
+             addr.nTime.time_since_epoch().count());
+            }
             vAddrOk.push_back(addr);
         }
+    }
+    // Experiment 4: summary log per message
+    if (vAddr.size() >= 990) {
+        LogDebug(BCLog::NET, "experiment4: getaddr response from peer=%d size=%zu forced to 30 days old\n",
+                 pfrom.GetId(), vAddr.size());
+    } else {
+        LogDebug(BCLog::NET, "experiment4: gossip addr from peer=%d size=%zu kept real timestamps\n",
+                 pfrom.GetId(), vAddr.size());
     }
     peer.m_addr_processed += num_proc;
     peer.m_addr_rate_limited += num_rate_limit;
