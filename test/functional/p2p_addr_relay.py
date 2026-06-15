@@ -177,6 +177,15 @@ class AddrTest(BitcoinTestFramework):
         ipv4_branching_factor = 2
         assert_equal(total_ipv4_received, num_ipv4_addrs * ipv4_branching_factor)
 
+        self.log.info('Check that banned addresses are not relayed')
+        msg = self.setup_addr_msg(num_ipv4_addrs)
+        banned_ip = msg.addrs[0].ip
+        self.nodes[0].setban(banned_ip, "add")
+        self.send_addr_msg(addr_source, msg, receivers)
+        new_total_ipv4_received = sum(r.num_ipv4_received for r in receivers)
+        assert_equal(new_total_ipv4_received - total_ipv4_received , (num_ipv4_addrs - 1) * ipv4_branching_factor)
+        self.nodes[0].setban(banned_ip, "remove")
+
         self.nodes[0].disconnect_p2ps()
 
         self.log.info('Check relay of addresses received from outbound peers')
