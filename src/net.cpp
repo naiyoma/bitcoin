@@ -165,7 +165,7 @@ uint16_t GetListenPort()
 [[nodiscard]] static std::optional<CService> GetLocal(const CNode& peer)
 {
     if (!fListen) return std::nullopt;
-
+    // this is a bit confusing to me because what why should flisten be false here when its true in maybesendaddr
     std::optional<CService> addr;
     int nBestScore = -1;
     int nBestReachability = -1;
@@ -175,6 +175,16 @@ uint16_t GetListenPort()
             // For privacy reasons, don't advertise our privacy-network address
             // to other networks and don't advertise our other-network address
             // to privacy networks.
+            LogDebug(BCLog::NET,
+            "GetLocal: local_addr=%s
+            peer_net=%s
+            local_net=%s "
+            "local_is_privacy=%d peer_is_privacy=%d\n",
+            local_addr.ToStringAddr(),
+            GetNetworkName(peer.ConnectedThroughNetwork()),
+            GetNetworkName(local_addr.GetNetwork()),
+            local_addr.IsPrivacyNet(),
+            peer.IsConnectedThroughPrivacyNet());
             if (local_addr.GetNetwork() != peer.ConnectedThroughNetwork()
                 && (local_addr.IsPrivacyNet() || peer.IsConnectedThroughPrivacyNet())) {
                 continue;
@@ -276,28 +286,34 @@ void ClearLocal()
 // learn a new local address
 bool AddLocal(const CService& addr_, int nScore)
 {
-    CService addr{MaybeFlipIPv6toCJDNS(addr_)};
 
+    CService addr{MaybeFlipIPv6toCJDNS(addr_)};
+    LogDebug(BCLog::NET, "AddLocal(%s,%i)\n", addr.ToStringAddr(), nScore);
     if (!addr.IsRoutable())
         return false;
-
+    LogDebug(BCLog::NET, "AddLocal: is this address routable  %s is routable\n", addr.IsRoutable());    
     if (!fDiscover && nScore < LOCAL_MANUAL)
         return false;
-
+    LogDebug(BCLog::NET, "AddLocal: is fDiscover true? %d and is nScore < LOCAL_MANUAL? %d\n", fDiscover, nScore < LOCAL_MANUAL);
     if (!g_reachable_nets.Contains(addr))
         return false;
-
+    LogDebug(BCLog::NET, "AddLocal: is this address in reachable nets? %d\n", g_reachable_nets.Contains(addr));
     if (fLogIPs) {
-        LogInfo("AddLocal(%s,%i)\n", addr.ToStringAddrPort(), nScore);
+        LogInfo("AddLocal(%s,%i)\n", addr.ToStringAddr(), nScore);
     }
 
     {
         LOCK(g_maplocalhost_mutex);
         const auto [it, is_newly_added] = mapLocalHost.emplace(addr, LocalServiceInfo());
+        LogDebug(BCLog::NET, "AddLocal: is this address newly added? %d\n", is_newly_added);
         LocalServiceInfo &info = it->second;
+        LogDebug(BCLog::NET, "AddLocal: is this address already in mapLocalHost? %d\n", !is_newly_added);
         if (is_newly_added || nScore >= info.nScore) {
+            LogDebug(BCLog::NET, "AddLocal: is this address newly added or nScore >= info.nScore? %d\n", is_newly_added || nScore >= info.nScore);
             info.nScore = nScore + (is_newly_added ? 0 : 1);
+            LogDebug(BCLog::NET, "AddLocal: is this address newly added or nScore >= info.nScore? %d\n", is_newly_added || nScore >= info.nScore);
             info.nPort = addr.GetPort();
+            LogDebug(BCLog::NET, "AddLocal: is this address newly added or nScore >= info.nScore? %d\n", is_newly_added || nScore >= info.nScore);
         }
     }
 
@@ -306,6 +322,7 @@ bool AddLocal(const CService& addr_, int nScore)
 
 bool AddLocal(const CNetAddr &addr, int nScore)
 {
+    LogDebug(BCLog::NET, "AddLocal(%s, %i)\n", addr.ToStringAddr(), nScore);
     return AddLocal(CService(addr, GetListenPort()), nScore);
 }
 
@@ -3389,6 +3406,7 @@ void Discover()
     for (const CNetAddr &addr: GetLocalAddresses()) {
         if (AddLocal(addr, LOCAL_IF) && fLogIPs) {
             LogInfo("%s: %s\n", __func__, addr.ToStringAddr());
+            LogDebug(BCLog::NET, "Discover AddLocal Discover: %s - %s\n", addr.ToStringAddr(), addr.IsRoutable() ? "is routable" : "is not routable");
         }
     }
 }
@@ -3459,6 +3477,8 @@ bool CConnman::Bind(const CService& addr_, unsigned int flags, NetPermissionFlag
 
     if (addr.IsRoutable() && fDiscover && !(flags & BF_DONT_ADVERTISE) && !NetPermissions::HasFlag(permissions, NetPermissionFlags::NoBan)) {
         AddLocal(addr, LOCAL_BIND);
+        LogDebug(BCLog::NET, "Bind AddLocal(%s, %i) (bound to %s)\n", addr.ToStringAddrPort(), LOCAL_BIND, addr.ToStringAddr());
+
     }
 
     return true;

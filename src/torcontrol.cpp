@@ -540,6 +540,7 @@ void TorController::add_onion_cb(TorControlConnection& _conn, const TorControlRe
             LogWarning("tor: Error writing service private key to %s", fs::PathToString(GetPrivateKeyFile()));
         }
         AddLocal(m_service, LOCAL_MANUAL);
+        LogDebug(BCLog::TOR, "TorControll AddLocal Added local service %s", m_service.ToStringAddrPort());
         // ... onion requested - keep connection open
     } else if (reply.code == TOR_REPLY_UNRECOGNIZED) {
         LogWarning("tor: Add onion failed with unrecognized command (You probably need to upgrade Tor)");

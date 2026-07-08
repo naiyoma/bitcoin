@@ -5388,12 +5388,22 @@ void PeerManagerImpl::MaybeSendPing(CNode& node_to, Peer& peer, NodeClock::time_
 
 void PeerManagerImpl::MaybeSendAddr(CNode& node, Peer& peer, std::chrono::microseconds current_time)
 {
+    // self -announcment rules 
+    // is this peer should be an addr relay peer 
+    // we should listen=1 meaning we accept incoming connections 
+    // we should not be in intial block download mode
+    // this peers next announcment time should be less than the current time 
+    // i think this means that we we might have already announced to this peer and we are ready because if its more than the current time then enough time has not passed 
     // Nothing to do for non-address-relay peers
+
     if (!peer.m_addr_relay_enabled) return;
+    // LogDebug(BCLog::NET, "Maybe we should self announce to this address relay peer %d, relay_enabled=%d\n", peer.m_id, peer.m_addr_relay_enabled);
 
     LOCK(peer.m_addr_send_times_mutex);
     // Periodically advertise our local address to the peer.
-    if (fListen && !m_chainman.IsInitialBlockDownload() &&
+    // && !m_chainman.IsInitialBlockDownload()
+    LogDebug(BCLog::NET, "Maybe we should self announce to this address relay peer %d, relay_enabled=%d, fListen=%d, next_local_addr_send=%d, current_time=%d\n", peer.m_id, peer.m_addr_relay_enabled, fListen, peer.m_next_local_addr_send.count(), current_time.count());
+    if (fListen  &&
         peer.m_next_local_addr_send < current_time) {
         // If we've sent before, clear the bloom filter for the peer, so that our
         // self-announcement will actually go out.

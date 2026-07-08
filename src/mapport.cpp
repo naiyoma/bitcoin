@@ -49,6 +49,7 @@ static void ProcessPCP()
         if (MappingResult* mapping = std::get_if<MappingResult>(&res)) {
             LogInfo("portmap: Added mapping %s", mapping->ToString());
             AddLocal(mapping->external, LOCAL_MAPPED);
+            LogDebug(BCLog::NET, "Port Map AddLocal portmap: Added local service %s", mapping->external.ToStringAddrPort());
             ret = true;
             actual_lifetime = std::min(actual_lifetime, mapping->lifetime);
         } else if (MappingError *err = std::get_if<MappingError>(&res)) {
