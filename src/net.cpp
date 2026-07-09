@@ -176,10 +176,7 @@ uint16_t GetListenPort()
             // to other networks and don't advertise our other-network address
             // to privacy networks.
             LogDebug(BCLog::NET,
-            "GetLocal: local_addr=%s
-            peer_net=%s
-            local_net=%s "
-            "local_is_privacy=%d peer_is_privacy=%d\n",
+            "GetLocal: local_addr=%s peer_net=%s local_net=%s local_is_privacy=%d peer_is_privacy=%d\n",
             local_addr.ToStringAddr(),
             GetNetworkName(peer.ConnectedThroughNetwork()),
             GetNetworkName(local_addr.GetNetwork()),
@@ -187,17 +184,33 @@ uint16_t GetListenPort()
             peer.IsConnectedThroughPrivacyNet());
             if (local_addr.GetNetwork() != peer.ConnectedThroughNetwork()
                 && (local_addr.IsPrivacyNet() || peer.IsConnectedThroughPrivacyNet())) {
+                LogDebug(BCLog::NET, "GetLocal: skipping local_addr=%s because of privacy network mismatch\n", 
+                local_addr.ToStringAddr());
                 continue;
             }
             const int nScore{local_service_info.nScore};
             const int nReachability{local_addr.GetReachabilityFrom(peer.addr)};
-            if (nReachability > nBestReachability || (nReachability == nBestReachability && nScore > nBestScore)) {
+            const bool is_new_best{nReachability > nBestReachability || (nReachability == nBestReachability && nScore > nBestScore)};
+            LogDebug(BCLog::NET,
+                "GetLocal: scoring local_addr=%s score=%d reachability=%d (current best score=%d reachability=%d) -> %s\n",
+                local_addr.ToStringAddr(),
+                nScore,
+                nReachability,
+                nBestScore,
+                nBestReachability,
+                is_new_best ? "new best" : "kept previous best");
+            if (is_new_best) {
                 addr.emplace(CService{local_addr, local_service_info.nPort});
                 nBestReachability = nReachability;
                 nBestScore = nScore;
             }
         }
     }
+    LogDebug(BCLog::NET, "GetLocal: selected local_addr=%s (best score=%d reachability=%d) for peer=%s\n",
+             addr ? addr->ToStringAddr() : "(none)",
+             nBestScore,
+             nBestReachability,
+             peer.addr.ToStringAddr());
     return addr;
 }
 
