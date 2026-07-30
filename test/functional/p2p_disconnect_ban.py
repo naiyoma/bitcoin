@@ -55,7 +55,7 @@ class DisconnectBanTest(BitcoinTestFramework):
 
         self.log.info("setban: fail to ban an invalid subnet")
         assert_raises_rpc_error(-30, "Error: Invalid IP/Subnet", self.nodes[1].setban, "127.0.0.1/42", "add")
-        assert_equal(len(self.nodes[1].listbanned()), 1)  # still only one banned ip because 127.0.0.1 is within the range of 127.0.0.0/24
+        assert_equal(len(self.nodes[1].listbanned()), 1)  # still only one banned ip because /42 setban was rejected as invalid input
 
         self.log.info("setban: fail to ban with past absolute timestamp")
         assert_raises_rpc_error(-8, "Error: Absolute timestamp is in the past", self.nodes[1].setban, "127.27.0.1", "add", 123, True)
