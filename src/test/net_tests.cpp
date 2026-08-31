@@ -1625,6 +1625,41 @@ BOOST_AUTO_TEST_CASE(private_broadcast_version_does_not_update_addrman_services)
     m_node.peerman->FinalizeNode(node);
 }
 
+BOOST_AUTO_TEST_CASE(non_inbound_version_message_promotes_addr_to_tried)
+{
+    LOCK(NetEventsInterface::g_msgproc_mutex);
+    const CNetAddr source{LookupHost("2.3.4.5", /*fAllowLookup=*/false).value()};
+    const CAddress addr{Lookup("5.6.7.8", 8333, /*fAllowLookup=*/false).value(),NODE_NONE};
+    // Good() returns false for an address it not already know, so the entry must
+    // first exist before the handshake for the promotions to be happen.
+    BOOST_REQUIRE(m_node.addrman->Add({addr}, source));
+    BOOST_CHECK_EQUAL(m_node.addrman->Size(/*net=*/std::nullopt, /*in_new*/true), 1U);
+    BOOST_CHECK_EQUAL(m_node.addrman->Size(/*net=*/std::nullopt, /*in_new*/false), 0U);
+
+    CNode node{/*id=*/0,
+               /*sock=*/nullptr,
+               /*addrIn=*/addr,
+               /*nKeyedNetGroupIn=*/0,
+               /*nLocalHostNonceIn=*/0,
+               /*addrBindIn=*/CService{},
+               /*addrNameIn=*/"",
+               /*conn_type_in=*/ConnectionType::OUTBOUND_FULL_RELAY,
+               /*inbound_onion=*/false,
+               /*network_key=*/0};
+    auto& conman = static_cast<ConnmanTestMsg&>(*m_node.connman);
+    conman.Handshake(node,
+                     /*successfully_connected=*/true,
+                     /*remote_services=*/ServiceFlags(NODE_NETWORK| NODE_WITNESS),
+                     /*local_services=*/ServiceFlags(NODE_NETWORK| NODE_WITNESS),
+                     /*version=*/PROTOCOL_VERSION,
+                     /*relay_txs=*/true);
+
+    BOOST_REQUIRE(!node.fDisconnect);
+    BOOST_CHECK_EQUAL(m_node.addrman->Size(/*net=*/std::nullopt, /*in_new*/false), 1U);
+    BOOST_CHECK_EQUAL(m_node.addrman->Size(/*net=*/std::nullopt, /*in_new*/true), 0U);
+
+}
+
 BOOST_AUTO_TEST_CASE(addlocal_onlynet_externalip)
 {
     // Test that `-externalip` addresses bypass `-onlynet`, but score alone does
