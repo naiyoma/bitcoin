@@ -1625,7 +1625,7 @@ BOOST_AUTO_TEST_CASE(private_broadcast_version_does_not_update_addrman_services)
     m_node.peerman->FinalizeNode(node);
 }
 
-BOOST_AUTO_TEST_CASE(non_inbound_version_message_promotes_addr_to_tried)
+BOOST_AUTO_TEST_CASE(outbound_version_message_promotes_addr_to_tried)
 {
     LOCK(NetEventsInterface::g_msgproc_mutex);
     const CNetAddr source{LookupHost("2.3.4.5", /*fAllowLookup=*/false).value()};
@@ -1633,8 +1633,8 @@ BOOST_AUTO_TEST_CASE(non_inbound_version_message_promotes_addr_to_tried)
     // Good() returns false for an address it not already know, so the entry must
     // first exist before the handshake for the promotions to be happen.
     BOOST_REQUIRE(m_node.addrman->Add({addr}, source));
-    BOOST_CHECK_EQUAL(m_node.addrman->Size(/*net=*/std::nullopt, /*in_new*/true), 1U);
-    BOOST_CHECK_EQUAL(m_node.addrman->Size(/*net=*/std::nullopt, /*in_new*/false), 0U);
+    BOOST_CHECK_EQUAL(m_node.addrman->Size(/*net=*/std::nullopt, /*in_new=*/true), 1U);
+    BOOST_CHECK_EQUAL(m_node.addrman->Size(/*net=*/std::nullopt, /*in_new=*/false), 0U);
 
     CNode node{/*id=*/0,
                /*sock=*/nullptr,
@@ -1655,8 +1655,9 @@ BOOST_AUTO_TEST_CASE(non_inbound_version_message_promotes_addr_to_tried)
                      /*relay_txs=*/true);
 
     BOOST_REQUIRE(!node.fDisconnect);
-    BOOST_CHECK_EQUAL(m_node.addrman->Size(/*net=*/std::nullopt, /*in_new*/false), 1U);
-    BOOST_CHECK_EQUAL(m_node.addrman->Size(/*net=*/std::nullopt, /*in_new*/true), 0U);
+    BOOST_CHECK_EQUAL(m_node.addrman->Size(/*net=*/std::nullopt, /*in_new=*/false), 1U);
+    BOOST_CHECK_EQUAL(m_node.addrman->Size(/*net=*/std::nullopt, /*in_new=*/true), 0U);
+    m_node.peerman->FinalizeNode(node);
 
 }
 
