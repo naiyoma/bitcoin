@@ -391,6 +391,7 @@ BOOST_AUTO_TEST_CASE(rpc_ban)
     BOOST_CHECK_EQUAL(banned_until, time_remaining_expected + TicksSinceEpoch<std::chrono::seconds>(NodeClock::now()));
     BOOST_CHECK_EQUAL(ban_duration, banned_until - ban_created);
     BOOST_CHECK_EQUAL(time_remaining, time_remaining_expected);
+    BOOST_CHECK_EQUAL(ban_created, now.count() - 2);
 
     // must throw an exception because 127.0.0.1 is in already banned subnet range
     BOOST_CHECK_THROW(r = CallRPC(std::string("setban 127.0.0.1 add")), std::runtime_error);
