@@ -17,6 +17,7 @@ from test_framework.messages import (
     msg_headers,
     msg_verack,
     from_hex,
+    NODE_NONE,
 )
 from test_framework.p2p import (
     P2PInterface,
@@ -176,6 +177,27 @@ class AddrTest(BitcoinTestFramework):
         # originating node (addr_source).
         ipv4_branching_factor = 2
         assert_equal(total_ipv4_received, num_ipv4_addrs * ipv4_branching_factor)
+
+        self.log.info('Check that banned addresses are not relayed')
+        msg = self.setup_addr_msg(num_ipv4_addrs)
+        banned_ip = msg.addrs[0].ip
+        self.nodes[0].setban(banned_ip, "add")
+        self.send_addr_msg(addr_source, msg, receivers)
+        new_total_ipv4_received = sum(r.num_ipv4_received for r in receivers)
+        assert_equal(new_total_ipv4_received - total_ipv4_received , (num_ipv4_addrs - 1) * ipv4_branching_factor)
+        self.nodes[0].setban(banned_ip, "remove")
+
+        self.log.info("Check that address with NODE_NONE, are ignored")
+        msg = self.setup_addr_msg(num_ipv4_addrs)
+        node_none_ip = msg.addrs[1].ip
+        msg.addrs[1].nServices = NODE_NONE
+        self.send_addr_msg(addr_source, msg, receivers)
+        new_total = sum(r.num_ipv4_received for r in receivers)
+        # Only the 9 addrs with valid service flags relay (each to 2 peers); NODE_NONE is dropped.
+        assert_equal(new_total - new_total_ipv4_received, (num_ipv4_addrs - 1) * ipv4_branching_factor)
+        # Prove it's the service filter: the address is neither relayed nor stored.
+        assert node_none_ip not in {a["address"] for a in self.nodes[0].getnodeaddresses(count=0)}
+
 
         self.nodes[0].disconnect_p2ps()
 
