@@ -203,6 +203,12 @@ static constexpr double MAX_ADDR_RATE_PER_SECOND{0.1};
  *  based increments won't go above this, but the MAX_ADDR_TO_SEND increment following GETADDR
  *  is exempt from this limit). */
 static constexpr size_t MAX_ADDR_PROCESSING_TOKEN_BUCKET{MAX_ADDR_TO_SEND};
+/** The maximum rate of GETADDR requests we're willing to answer per peer, on average one
+ *  per 24 hours. This roughly matches the lifetime of the GETADDR response cache (see
+ *  CConnman::GetAddresses), so answering more often would mostly resend the same addresses. */
+static constexpr double MAX_GETADDR_RATE_PER_SECOND{1.0 / (24 * 60 * 60)};
+/** The limit of the GETADDR token bucket, i.e. how many requests a peer can save up. */
+static constexpr double MAX_GETADDR_TOKEN_BUCKET{1.0};
 /** Private broadcast connections must complete within this time. Disconnect the peer if it takes longer. */
 static constexpr auto PRIVATE_BROADCAST_MAX_CONNECTION_LIFETIME{3min};
 
@@ -375,8 +381,11 @@ struct Peer {
     /** Whether the peer has signaled support for receiving ADDRv2 (BIP155)
      *  messages, indicating a preference to receive ADDRv2 instead of ADDR ones. */
     std::atomic_bool m_wants_addrv2{false};
-    /** Whether this peer has already sent us a getaddr message. */
-    bool m_getaddr_recvd GUARDED_BY(NetEventsInterface::g_msgproc_mutex){false};
+    /** Number of getaddr messages we're willing to answer from this peer. Start at 1 to
+     *  permit the initial request. */
+    double m_getaddr_token_bucket GUARDED_BY(NetEventsInterface::g_msgproc_mutex){1.0};
+    /** When m_getaddr_token_bucket was last updated */
+    NodeClock::time_point m_getaddr_token_timestamp GUARDED_BY(NetEventsInterface::g_msgproc_mutex){NodeClock::now()};
     /** Number of addresses that can be processed from this peer. Start at 1 to
      *  permit self-announcement. */
     double m_addr_token_bucket GUARDED_BY(NetEventsInterface::g_msgproc_mutex){1.0};
@@ -5164,13 +5173,21 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         // never fail.
         Assume(SetupAddressRelay(pfrom, peer));
 
-        // Only send one GetAddr response per connection to reduce resource waste
-        // and discourage addr stamping of INV announcements.
-        if (peer.m_getaddr_recvd) {
+        // Rate limit GetAddr responses to reduce resource waste and discourage
+        // addr stamping of INV announcements.
+        const auto current_time{NodeClock::now()};
+        if (peer.m_getaddr_token_bucket < MAX_GETADDR_TOKEN_BUCKET) {
+            // Don't increment bucket if it's already full
+            const auto time_diff{current_time - peer.m_getaddr_token_timestamp};
+            const double increment{std::max(Ticks<SecondsDouble>(time_diff), 0.0) * MAX_GETADDR_RATE_PER_SECOND};
+            peer.m_getaddr_token_bucket = std::min<double>(peer.m_getaddr_token_bucket + increment, MAX_GETADDR_TOKEN_BUCKET);
+        }
+        peer.m_getaddr_token_timestamp = current_time;
+        if (peer.m_getaddr_token_bucket < 1.0) {
             LogDebug(BCLog::NET, "Ignoring repeated \"getaddr\". peer=%d\n", pfrom.GetId());
             return;
         }
-        peer.m_getaddr_recvd = true;
+        peer.m_getaddr_token_bucket -= 1.0;
 
         peer.m_addrs_to_send.clear();
         std::vector<CAddress> vAddr;
