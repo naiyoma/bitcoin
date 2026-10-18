@@ -260,7 +260,9 @@ class AddrTest(BitcoinTestFramework):
         # empty addrman. Due to GETADDR response caching (see
         # CConnman::GetAddresses), the node would continue to provide 0 addrs
         # in response until enough time has passed or the node is restarted.
-        self.restart_node(0)
+        # Disable inactivity checks so that connections survive the 24 hour
+        # mocktime jump used to refill the getaddr token bucket.
+        self.restart_node(0, ["-whitelist=addr@127.0.0.1", "-peertimeout=999999999"])
 
         self.log.info('Test getaddr behavior')
         self.log.info('Check that we send a getaddr message upon connecting to an outbound-full-relay peer')
@@ -309,7 +311,7 @@ class AddrTest(BitcoinTestFramework):
         assert_equal(block_relay_peer.num_ipv4_received, 0)
         assert inbound_peer.num_ipv4_received > 100
 
-        self.log.info('Check that we answer getaddr messages only once per connection')
+        self.log.info('Check that we answer getaddr messages at most once per 24 hours')
         received_addrs_before = inbound_peer.num_ipv4_received
         with self.nodes[0].assert_debug_log(['Ignoring repeated "getaddr".']):
             inbound_peer.send_and_ping(msg_getaddr())
@@ -318,6 +320,16 @@ class AddrTest(BitcoinTestFramework):
         inbound_peer.sync_with_ping()
         received_addrs_after = inbound_peer.num_ipv4_received
         assert_equal(received_addrs_before, received_addrs_after)
+
+        self.log.info('Check that the getaddr token bucket refills after 24 hours')
+        # The bucket was last updated by the ignored getaddr above, 10 minutes ago
+        self.mocktime += 24 * 60 * 60 - 10 * 60
+        self.nodes[0].setmocktime(self.mocktime)
+        with self.nodes[0].assert_debug_log(expected_msgs=[], unexpected_msgs=['Ignoring repeated "getaddr".']):
+            inbound_peer.send_and_ping(msg_getaddr())
+        self.mocktime += 10 * 60
+        self.nodes[0].setmocktime(self.mocktime)
+        inbound_peer.wait_until(lambda: inbound_peer.num_ipv4_received > received_addrs_after)
 
         self.nodes[0].disconnect_p2ps()
 
