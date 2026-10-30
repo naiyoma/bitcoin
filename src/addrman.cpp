@@ -953,33 +953,36 @@ void AddrManImpl::ResolveCollisions_()
     }
 }
 
-std::pair<CAddress, NodeSeconds> AddrManImpl::SelectTriedCollision_()
+std::pair<CAddress, NodeSeconds> AddrManImpl::SelectTriedCollision_(const std::unordered_set<Network>& networks)
 {
     AssertLockHeld(cs);
 
     if (m_tried_collisions.size() == 0) return {};
 
-    std::set<nid_type>::iterator it = m_tried_collisions.begin();
+    // Start at a random collision and move through the set, wrapping around,
+    // until one whose to-be-evicted entry is one of the `networks` is found.
+    auto it{std::next(m_tried_collisions.begin(), insecure_rand.randrange(m_tried_collisions.size()))};
+    for (size_t i{0}; i < m_tried_collisions.size(); ++i, ++it) {
+        if (it == m_tried_collisions.end()) it = m_tried_collisions.begin();
 
-    // Selects a random element from m_tried_collisions
-    std::advance(it, insecure_rand.randrange(m_tried_collisions.size()));
-    nid_type id_new = *it;
+        // Ids no longer in mapInfo are removed by ResolveCollisions_().
+        const auto it_new{mapInfo.find(*it)};
+        if (it_new == mapInfo.end()) continue;
 
-    // If id_new not found in mapInfo remove it from m_tried_collisions
-    if (!mapInfo.contains(id_new)) {
-        m_tried_collisions.erase(it);
-        return {};
+        // which tried bucket to move the entry to
+        int tried_bucket = it_new->second.GetTriedBucket(nKey, m_netgroupman);
+        int tried_bucket_pos = it_new->second.GetBucketPosition(nKey, false, tried_bucket);
+
+        const nid_type id_old{vvTried[tried_bucket][tried_bucket_pos]};
+        if (!Assume(id_old != -1)) continue;
+        const AddrInfo& info_old = mapInfo[id_old];
+        // The old entry can't be tested if its network isn't one we can reach.
+        if (!networks.empty() && !networks.contains(info_old.GetNetwork())) continue;
+        return {info_old, info_old.m_last_try};
     }
 
-    const AddrInfo& newInfo = mapInfo[id_new];
+    return {};
 
-    // which tried bucket to move the entry to
-    int tried_bucket = newInfo.GetTriedBucket(nKey, m_netgroupman);
-    int tried_bucket_pos = newInfo.GetBucketPosition(nKey, false, tried_bucket);
-
-    Assume(vvTried[tried_bucket][tried_bucket_pos] != -1);
-    const AddrInfo& info_old = mapInfo[vvTried[tried_bucket][tried_bucket_pos]];
-    return {info_old, info_old.m_last_try};
 }
 
 std::optional<AddressPosition> AddrManImpl::FindAddressEntry_(const CAddress& addr)
@@ -1190,11 +1193,11 @@ void AddrManImpl::ResolveCollisions()
     Check();
 }
 
-std::pair<CAddress, NodeSeconds> AddrManImpl::SelectTriedCollision()
+std::pair<CAddress, NodeSeconds> AddrManImpl::SelectTriedCollision(const std::unordered_set<Network>& networks)
 {
     LOCK(cs);
     Check();
-    auto ret = SelectTriedCollision_();
+    auto ret = SelectTriedCollision_(networks);
     Check();
     return ret;
 }
@@ -1301,9 +1304,9 @@ void AddrMan::ResolveCollisions()
     m_impl->ResolveCollisions();
 }
 
-std::pair<CAddress, NodeSeconds> AddrMan::SelectTriedCollision()
+std::pair<CAddress, NodeSeconds> AddrMan::SelectTriedCollision(const std::unordered_set<Network>& networks)
 {
-    return m_impl->SelectTriedCollision();
+    return m_impl->SelectTriedCollision(networks);
 }
 
 std::pair<CAddress, NodeSeconds> AddrMan::Select(bool new_only, const std::unordered_set<Network>& networks) const
