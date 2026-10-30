@@ -980,6 +980,31 @@ BOOST_AUTO_TEST_CASE(addrman_noevict)
     BOOST_CHECK(addrman->SelectTriedCollision().first.ToStringAddrPort() == "[::]:0");
 }
 
+BOOST_AUTO_TEST_CASE(addrman_select_tried_collision_networks)
+{
+    auto addrman{std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node))};
+    CNetAddr source{ResolveIP("252.2.2.2")};
+
+    for (unsigned int i = 1; i < 36; i++) {
+        CService addr{ResolveService("250.1.1." + ToString(i))};
+        BOOST_CHECK(addrman->Add({CAddress(addr, NODE_NONE)}, source));
+        BOOST_CHECK(addrman->Good(addr));
+    }
+    // 36 collides with 19 (IPv4)
+    CService addr36{ResolveService("250.1.1.36")};
+    BOOST_CHECK(addrman->Add({CAddress(addr36, NODE_NONE)}, source));
+    BOOST_CHECK(!addrman->Good(addr36));
+
+    // The to-be-evicted address is IPv4: nothing is returned when only IPv6 is allowed...
+    BOOST_CHECK_EQUAL(addrman->SelectTriedCollision({NET_IPV6}).first.ToStringAddrPort(), "[::]:0");
+    // ...and it is returned when IPv4 is allowed, or with no filter.
+    BOOST_CHECK_EQUAL(addrman->SelectTriedCollision({NET_IPV4}).first.ToStringAddrPort(), "250.1.1.19:0");
+    BOOST_CHECK_EQUAL(addrman->SelectTriedCollision().first.ToStringAddrPort(), "250.1.1.19:0");
+    // Filtering does not drop the collision.
+    BOOST_CHECK_EQUAL(addrman->SelectTriedCollision({NET_IPV6}).first.ToStringAddrPort(), "[::]:0");
+    BOOST_CHECK_EQUAL(addrman->SelectTriedCollision().first.ToStringAddrPort(), "250.1.1.19:0");
+}
+
 BOOST_AUTO_TEST_CASE(addrman_evictionworks)
 {
     auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
