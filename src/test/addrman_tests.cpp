@@ -980,6 +980,45 @@ BOOST_AUTO_TEST_CASE(addrman_noevict)
     BOOST_CHECK(addrman->SelectTriedCollision().first.ToStringAddrPort() == "[::]:0");
 }
 
+BOOST_AUTO_TEST_CASE(addrman_resolve_collisions_unreachable)
+{
+    FakeNodeClock clock{};
+
+    auto addrman{std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node))};
+    CNetAddr source{ResolveIP("252.2.2.2")};
+
+    for (unsigned int i = 1; i < 36; i++) {
+        CService addr{ResolveService("250.1.1." + ToString(i))};
+        BOOST_CHECK(addrman->Add({CAddress(addr, NODE_NONE)}, source));
+        BOOST_CHECK(addrman->Good(addr));
+    }
+
+    // Let the last success of the tried entries become too old to keep them
+    // on a collision.
+    clock += ADDRMAN_REPLACEMENT + 1h;
+
+    // Collision in tried table between 36 and 19.
+    CService addr36{ResolveService("250.1.1.36")};
+    BOOST_CHECK(addrman->Add({CAddress(addr36, NODE_NONE)}, source));
+    BOOST_CHECK(!addrman->Good(addr36));
+    BOOST_CHECK_EQUAL(addrman->SelectTriedCollision().first.ToStringAddrPort(), "250.1.1.19:0");
+
+    // 19 is on a reachable network (or no filter is given), so it is left to
+    // be tested and the collision stays.
+    addrman->ResolveCollisions();
+    addrman->ResolveCollisions({NET_IPV4});
+    BOOST_CHECK_EQUAL(addrman->SelectTriedCollision().first.ToStringAddrPort(), "250.1.1.19:0");
+
+    // 19 is not on a reachable network, so it can't be tested and is replaced
+    // by 36 right away.
+    addrman->ResolveCollisions({NET_IPV6});
+    BOOST_CHECK(addrman->SelectTriedCollision().first.ToStringAddrPort() == "[::]:0");
+    AddressPosition addr_pos36{addrman->FindAddressEntry(CAddress(addr36, NODE_NONE)).value()};
+    BOOST_CHECK(addr_pos36.tried);
+    AddressPosition addr_pos19{addrman->FindAddressEntry(CAddress(ResolveService("250.1.1.19"), NODE_NONE)).value()};
+    BOOST_CHECK(!addr_pos19.tried);
+}
+
 BOOST_AUTO_TEST_CASE(addrman_evictionworks)
 {
     auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));

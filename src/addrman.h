@@ -157,8 +157,13 @@ public:
     //! Mark an entry as connection attempted to.
     void Attempt(const CService& addr, bool fCountFailure, NodeSeconds time = Now<NodeSeconds>());
 
-    //! See if any to-be-evicted tried table entries have been tested and if so resolve the collisions.
-    void ResolveCollisions();
+    /**
+     * See if any to-be-evicted tried table entries have been tested and if so resolve the collisions.
+     *
+     * @param[in] networks If non-empty, to-be-evicted entries that are not on one of these
+     *                     networks can't be tested and are replaced without waiting.
+     */
+    void ResolveCollisions(const std::unordered_set<Network>& networks = {});
 
     /**
      * Randomly select an address in the tried table that another address is
