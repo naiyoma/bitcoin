@@ -890,7 +890,7 @@ void AddrManImpl::SetServices_(const CService& addr, ServiceFlags nServices)
     info.nServices = nServices;
 }
 
-void AddrManImpl::ResolveCollisions_()
+void AddrManImpl::ResolveCollisions_(const std::unordered_set<Network>& networks)
 {
     AssertLockHeld(cs);
 
@@ -923,6 +923,12 @@ void AddrManImpl::ResolveCollisions_()
 
                 // Has successfully connected in last X hours
                 if (current_time - info_old.m_last_success < ADDRMAN_REPLACEMENT) {
+                    erase_collision = true;
+                } else if (!networks.empty() && !networks.contains(info_old.GetNetwork())) {
+                    // The old entry can't be tested if its network is not one we can reach.
+                    LogDebug(BCLog::ADDRMAN, "Unable to test unreachable %s; replacing with %s in tried table\n",
+                             info_old.ToStringAddrPort(), info_new.ToStringAddrPort());
+                    Good_(info_new, false, current_time);
                     erase_collision = true;
                 } else if (current_time - info_old.m_last_try < ADDRMAN_REPLACEMENT) { // attempted to connect and failed in last X hours
 
@@ -1182,11 +1188,11 @@ void AddrManImpl::Attempt(const CService& addr, bool fCountFailure, NodeSeconds 
     Check();
 }
 
-void AddrManImpl::ResolveCollisions()
+void AddrManImpl::ResolveCollisions(const std::unordered_set<Network>& networks)
 {
     LOCK(cs);
     Check();
-    ResolveCollisions_();
+    ResolveCollisions_(networks);
     Check();
 }
 
@@ -1296,9 +1302,9 @@ void AddrMan::Attempt(const CService& addr, bool fCountFailure, NodeSeconds time
     m_impl->Attempt(addr, fCountFailure, time);
 }
 
-void AddrMan::ResolveCollisions()
+void AddrMan::ResolveCollisions(const std::unordered_set<Network>& networks)
 {
-    m_impl->ResolveCollisions();
+    m_impl->ResolveCollisions(networks);
 }
 
 std::pair<CAddress, NodeSeconds> AddrMan::SelectTriedCollision()
