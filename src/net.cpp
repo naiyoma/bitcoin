@@ -2650,6 +2650,15 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect, std
     }
 
     while (!m_interrupt_net->interrupted()) {
+
+        if (!fNetworkActive) {
+            // Don't consume seednodes, anchors or addrman selections while the
+            // network is inactive: OpenNetworkConnection() would refuse the
+            // connection and they would be lost.
+            m_interrupt_net->sleep_for(500ms);
+            continue;
+        }
+
         if (add_addr_fetch) {
             add_addr_fetch = false;
             const auto& seed{SpanPopBack(seed_nodes)};
