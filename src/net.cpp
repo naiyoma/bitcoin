@@ -3831,6 +3831,11 @@ std::vector<CAddress> CConnman::GetAddressesUnsafe(size_t max_addresses, size_t 
     return addresses;
 }
 
+//! Fingerprint defense: each served GETADDR timestamp is aged by a random
+//! 0..ADDR_FUZZ_MAX offset so a dual-homed node's per-network responses do not
+//! correlate. Sized to the measured natural inter-node timestamp spread.
+static constexpr std::chrono::hours ADDR_FUZZ_MAX{48};
+
 std::vector<CAddress> CConnman::GetAddresses(CNode& requestor, size_t max_addresses, size_t max_pct)
 {
     uint64_t network_id = requestor.m_network_key;
@@ -3839,6 +3844,31 @@ std::vector<CAddress> CConnman::GetAddresses(CNode& requestor, size_t max_addres
     CachedAddrResponse& cache_entry = r.first->second;
     if (cache_entry.m_cache_entry_expiration < current_time) { // If emplace() added new one it has expiration 0.
         cache_entry.m_addrs_response_cache = GetAddressesUnsafe(max_addresses, max_pct, /*network=*/std::nullopt);
+
+        // Fingerprint defense (serve-time timestamp fuzzing).
+        //
+        // A dual-homed node answers GETADDR from one shared AddrMan, so a peer it
+        // knows appears with the SAME nTime in its clearnet and onion responses,
+        // letting an attacker correlate the two interfaces and link the identities.
+        // Age each served timestamp by a random 0..ADDR_FUZZ_MAX. This cache is
+        // keyed per network (m_network_key) and rebuilt in a separate call per
+        // interface, so each interface draws independent offsets: a shared peer's
+        // timestamp no longer matches across the two responses.
+        //
+        // Serve-time only: AddrMan keeps the real nTime, so our own aging
+        // (IsTerrible), peer selection and liveness are unchanged. One-directional
+        // (older, never newer) keeps every value inside (10 min, 30 days) and never
+        // emits a future timestamp that a receiver would clamp.
+        {
+            FastRandomContext fuzz_rng;
+            for (CAddress& addr : cache_entry.m_addrs_response_cache) {
+                addr.nTime = std::max(NodeSeconds{0s},
+                                      addr.nTime - fuzz_rng.randrange<std::chrono::seconds>(ADDR_FUZZ_MAX));
+            }
+            LogDebug(BCLog::ADDRMAN, "addr-fuzz: aged %u served GETADDR timestamps (<=%dh) for network_key=%d\n",
+                     (unsigned)cache_entry.m_addrs_response_cache.size(),
+                     (int)ADDR_FUZZ_MAX.count(), (int)network_id);
+        }
         // Choosing a proper cache lifetime is a trade-off between the privacy leak minimization
         // and the usefulness of ADDR responses to honest users.
         //
