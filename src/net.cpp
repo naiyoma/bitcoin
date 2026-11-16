@@ -3831,7 +3831,8 @@ std::vector<CAddress> CConnman::GetAddressesUnsafe(size_t max_addresses, size_t 
     return addresses;
 }
 
-//! Fingerprint defense: each served GETADDR timestamp is aged by a random
+//! Fingerprint defense: each served GETADDR timestamp of a foreign-network
+//! address (network != requester network) is aged by a random
 //! 0..ADDR_FUZZ_MAX offset so a dual-homed node's per-network responses do not
 //! correlate. Sized to the measured natural inter-node timestamp spread.
 static constexpr std::chrono::hours ADDR_FUZZ_MAX{48};
@@ -3850,22 +3851,30 @@ std::vector<CAddress> CConnman::GetAddresses(CNode& requestor, size_t max_addres
         // A dual-homed node answers GETADDR from one shared AddrMan, so a peer it
         // knows appears with the SAME nTime in its clearnet and onion responses,
         // letting an attacker correlate the two interfaces and link the identities.
-        // Age each served timestamp by a random 0..ADDR_FUZZ_MAX. This cache is
-        // keyed per network (m_network_key) and rebuilt in a separate call per
-        // interface, so each interface draws independent offsets: a shared peer's
-        // timestamp no longer matches across the two responses.
+        // Rule: age by a random 0..ADDR_FUZZ_MAX only the addresses whose network
+        // differs from the requester's network; same-network addresses are served
+        // with their real nTime. This cache is keyed per network (m_network_key is
+        // derived from ConnectedThroughNetwork()), so every requester sharing this
+        // entry is on the same network and the rule can be applied at build time.
+        // An address foreign to both interfaces (e.g. IPv4 for an IPv6+onion node)
+        // is fuzzed independently in each cache, so it no longer matches.
         //
         // Serve-time only: AddrMan keeps the real nTime, so our own aging
         // (IsTerrible), peer selection and liveness are unchanged. One-directional
         // (older, never newer) keeps every value inside (10 min, 30 days) and never
         // emits a future timestamp that a receiver would clamp.
         {
+            const Network requestor_net{requestor.ConnectedThroughNetwork()};
             FastRandomContext fuzz_rng;
+            size_t fuzzed{0};
             for (CAddress& addr : cache_entry.m_addrs_response_cache) {
+                if (addr.GetNetClass() == requestor_net) continue;
                 addr.nTime = std::max(NodeSeconds{0s},
                                       addr.nTime - fuzz_rng.randrange<std::chrono::seconds>(ADDR_FUZZ_MAX));
+                ++fuzzed;
             }
-            LogDebug(BCLog::ADDRMAN, "addr-fuzz: aged %u served GETADDR timestamps (<=%dh) for network_key=%d\n",
+            LogDebug(BCLog::ADDRMAN, "addr-fuzz: requestor_net=%s aged %u/%u served GETADDR timestamps (<=%dh, foreign-network only) for network_key=%d\n",
+                     GetNetworkName(requestor_net), (unsigned)fuzzed,
                      (unsigned)cache_entry.m_addrs_response_cache.size(),
                      (int)ADDR_FUZZ_MAX.count(), (int)network_id);
         }
