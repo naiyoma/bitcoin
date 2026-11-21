@@ -128,7 +128,7 @@ public:
     void Attempt(const CService& addr, bool fCountFailure, NodeSeconds time)
         EXCLUSIVE_LOCKS_REQUIRED(!cs);
 
-    void ResolveCollisions() EXCLUSIVE_LOCKS_REQUIRED(!cs);
+    void ResolveCollisions(const std::unordered_set<Network>& networks) EXCLUSIVE_LOCKS_REQUIRED(!cs);
 
     std::pair<CAddress, NodeSeconds> SelectTriedCollision() EXCLUSIVE_LOCKS_REQUIRED(!cs);
 
@@ -275,7 +275,7 @@ private:
 
     void SetServices_(const CService& addr, ServiceFlags nServices) EXCLUSIVE_LOCKS_REQUIRED(cs);
 
-    void ResolveCollisions_() EXCLUSIVE_LOCKS_REQUIRED(cs);
+    void ResolveCollisions_(const std::unordered_set<Network>& networks) EXCLUSIVE_LOCKS_REQUIRED(cs);
 
     std::pair<CAddress, NodeSeconds> SelectTriedCollision_() EXCLUSIVE_LOCKS_REQUIRED(cs);
 
