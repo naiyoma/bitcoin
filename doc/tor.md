@@ -254,3 +254,10 @@ for normal IPv4/IPv6 communication, use:
   able to correlate those identities by observing shared runtime characteristics. It
   is not recommended to expose your node over multiple networks if you require
   unlinkability across those identities.
+
+## 5. Reachability behind carrier-grade NAT (CGNAT)
+
+A node behind carrier-grade NAT (CGNAT) cannot be made inbound-reachable on IPv4
+by any router or `-natpmp` setting, because the public IPv4 address belongs to
+the provider. Run a Tor onion service instead: it needs no inbound IP
+reachability, so it works regardless.
